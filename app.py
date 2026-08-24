@@ -38,7 +38,7 @@ if st.button("🚨 Analisis Triase Sekarang", use_container_width=True, type="pr
         with st.spinner("Menganalisis data pasien..."):
             try:
                 genai.configure(api_key=api_key)
-                model = genai.GenerativeModel('gemini-1.5-flash')
+                model = genai.GenerativeModel('gemini-pro')
                 
                 prompt = f"""
                 Kamu adalah Dokter Jaga IGD Senior. Analisis kasus berikut dan tentukan status triase (Merah, Kuning, Hijau, atau Hitam) dan disposisi ruangan (Rawat Jalan, Rawat Inap Biasa, HDU, atau ICU).
