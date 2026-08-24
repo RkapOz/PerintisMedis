@@ -7,13 +7,36 @@ st.set_page_config(page_title="ER Triage AI", page_icon="🚑", layout="wide")
 st.title("🚑 AI ER Triage Assistant")
 st.markdown("Sistem pendukung keputusan IGD untuk memprediksi kategori triase dan disposisi pasien berdasarkan keluhan dan hasil lab sederhana.")
 
-# Sidebar untuk API Key
+# Sidebar untuk Konfigurasi
 with st.sidebar:
     st.header("Konfigurasi API")
     api_key = st.text_input("Masukkan Google Gemini API Key:", type="password")
     st.markdown("[Dapatkan API Key Gratis di Google AI Studio](https://aistudio.google.com/app/apikey)")
     st.divider()
-    st.info("Kategori Triase:\n- 🔴 Merah: Resusitasi / Gawat Darurat\n- 🟡 Kuning: Urgent\n- 🟢 Hijau: Rawat Jalan\n- ⚫ Hitam: DOA / Palliative")
+    
+# Logika Auto-Detect Model yang Tersedia
+selected_model = None
+if api_key:
+    try:
+        genai.configure(api_key=api_key)
+        # Menarik daftar semua model yang diizinkan oleh API Key ini untuk generate content
+        available_models = [
+            m.name for m in genai.list_models() 
+            if 'generateContent' in m.supported_generation_methods
+        ]
+        
+        if available_models:
+            # Membersihkan prefix "models/" agar lebih rapi saat ditampilkan
+            model_options = [name.replace("models/", "") for name in available_models]
+            st.sidebar.success("API Key Valid!")
+            selected_model = st.sidebar.selectbox("Pilih Model AI (Auto-detect):", model_options)
+        else:
+            st.sidebar.error("API Key valid, tapi tidak ada model text-generation yang tersedia.")
+            
+    except Exception as e:
+        st.sidebar.error(f"Gagal memverifikasi API Key: {e}")
+
+st.sidebar.info("Kategori Triase:\n- 🔴 Merah: Resusitasi / Gawat Darurat\n- 🟡 Kuning: Urgent\n- 🟢 Hijau: Rawat Jalan\n- ⚫ Hitam: DOA / Palliative")
 
 # Form Input Data Pasien
 col1, col2 = st.columns(2)
@@ -34,11 +57,13 @@ with col2:
 if st.button("🚨 Analisis Triase Sekarang", use_container_width=True, type="primary"):
     if not api_key:
         st.error("Silakan masukkan Gemini API Key di sidebar sebelah kiri!")
+    elif not selected_model:
+        st.error("Silakan pilih model AI di sidebar terlebih dahulu.")
     else:
-        with st.spinner("Menganalisis data pasien..."):
+        with st.spinner(f"Menganalisis menggunakan model: {selected_model}..."):
             try:
-                genai.configure(api_key=api_key)
-                model = genai.GenerativeModel('gemini-1.5-flash-latest')
+                # Menggunakan model hasil deteksi otomatis
+                model = genai.GenerativeModel(selected_model)
                 
                 prompt = f"""
                 Kamu adalah Dokter Jaga IGD Senior. Analisis kasus berikut dan tentukan status triase (Merah, Kuning, Hijau, atau Hitam) dan disposisi ruangan (Rawat Jalan, Rawat Inap Biasa, HDU, atau ICU).
@@ -69,14 +94,15 @@ if st.button("🚨 Analisis Triase Sekarang", use_container_width=True, type="pr
                 st.divider()
                 st.subheader("📋 Hasil Analisis AI")
                 
-                if "Merah" in hasil.upper():
+                # Simple parser untuk mewarnai output berdasarkan Triase
+                if "MERAH" in hasil.upper():
                     st.error(hasil)
-                elif "Kuning" in hasil.upper():
+                elif "KUNING" in hasil.upper():
                     st.warning(hasil)
-                elif "Hijau" in hasil.upper():
+                elif "HIJAU" in hasil.upper():
                     st.success(hasil)
                 else:
                     st.info(hasil)
                     
             except Exception as e:
-                st.error(f"Terjadi kesalahan: {e}")
+                st.error(f"Terjadi kesalahan saat inferensi: {e}")
