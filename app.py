@@ -5,19 +5,18 @@ import google.generativeai as genai
 st.set_page_config(page_title="ER Triage AI", page_icon="🚑", layout="wide")
 
 st.title("🚑 AI ER Triage Assistant")
-st.markdown("Sistem pendukung keputusan IGD untuk memprediksi kategori triase dan disposisi pasien berdasarkan keluhan dan hasil lab sederhana.")
+st.markdown("Sistem pendukung keputusan IGD untuk memprediksi kategori triase dan disposisi pasien berdasarkan anamnesis komprehensif dan parameter objektif.")
 
-# 1. FITUR TAMBAHAN: MEDICAL DISCLAIMER (Sangat disukai juri!)
-st.warning("⚠️ **DISCLAIMER MEDIS:** Aplikasi ini adalah purwarupa (prototype) Sistem Pendukung Keputusan berbasis AI. Hasil analisis **TIDAK** menggantikan diagnosis medis profesional dari dokter. Selalu lakukan verifikasi klinis.")
+st.warning("⚠️ **DISCLAIMER MEDIS:** Aplikasi ini adalah purwarupa (prototype) Sistem Pendukung Keputusan berbasis AI. Hasil analisis **TIDAK** menggantikan diagnosis medis profesional. Selalu lakukan verifikasi klinis.")
 
-# Sidebar untuk Konfigurasi
+# Sidebar untuk Konfigurasi API
 with st.sidebar:
     st.header("Konfigurasi API")
     api_key = st.text_input("Masukkan Google Gemini API Key:", type="password")
     st.markdown("[Dapatkan API Key Gratis di Google AI Studio](https://aistudio.google.com/app/apikey)")
     st.divider()
     
-# Logika Auto-Detect Model yang Tersedia
+# Logika Auto-Detect Model
 selected_model = None
 if api_key:
     try:
@@ -37,11 +36,7 @@ if api_key:
             elif "gemini-pro" in model_options:
                 default_index = model_options.index("gemini-pro")
                 
-            selected_model = st.sidebar.selectbox(
-                "Pilih Model AI (Auto-detect):", 
-                options=model_options, 
-                index=default_index
-            )
+            selected_model = st.sidebar.selectbox("Pilih Model AI (Auto-detect):", options=model_options, index=default_index)
         else:
             st.sidebar.error("API Key valid, tapi tidak ada model text-generation yang tersedia.")
             
@@ -50,42 +45,76 @@ if api_key:
 
 st.sidebar.info("Kategori Triase:\n- 🔴 Merah: Resusitasi / Gawat Darurat\n- 🟡 Kuning: Urgent\n- 🟢 Hijau: Rawat Jalan\n- ⚫ Hitam: DOA / Palliative")
 
-# Form Input Data Pasien
+# --- UI FORM REKAM MEDIS ---
+st.header("📋 Form Triage & Rekam Medis")
+
 col1, col2 = st.columns(2)
 
 with col1:
-    st.subheader("Data Klinis Pasien")
+    st.subheader("Profil & Antropometri")
     usia = st.number_input("Usia (Tahun)", min_value=0, max_value=120, value=30)
-    keluhan = st.text_area("Keluhan Utama & Riwayat Singkat", "Misal: Nyeri dada kiri menjalar ke lengan, keringat dingin, mual sejak 2 jam lalu.")
-    kesadaran = st.selectbox("Tingkat Kesadaran (GCS)", ["Compos Mentis (Sadar Penuh)", "Apatis", "Somnolen", "Sopor", "Koma"])
+    gender = st.selectbox("Jenis Kelamin", ["Laki-laki", "Perempuan"])
+    etnis = st.text_input("Etnis / Ras (Opsional)", placeholder="Misal: Asia Tenggara")
+    
+    c_bb, c_tb = st.columns(2)
+    with c_bb:
+        bb = st.number_input("Berat Badan (kg)", min_value=0.0, value=65.0)
+    with c_tb:
+        tb = st.number_input("Tinggi Badan (cm)", min_value=0.0, value=165.0)
 
 with col2:
-    st.subheader("Hasil Lab (Rapid Test)")
+    st.subheader("Anamnesis Klinis")
+    keluhan = st.text_area("Keluhan Utama & Riwayat Singkat", "Nyeri dada kiri menjalar ke lengan, keringat dingin, mual sejak 2 jam lalu.")
+    riwayat_penyakit = st.text_area("Riwayat Penyakit Dahulu (Komorbid)", placeholder="Misal: Hipertensi, DM Tipe 2, Asma...")
+    riwayat_obat = st.text_input("Riwayat Penggunaan Obat", placeholder="Misal: Amlodipine 5mg, Metformin...")
+    alergi = st.text_input("Alergi (Obat/Makanan)", placeholder="Misal: Alergi Amoxicillin, Seafood...")
+
+st.divider()
+
+st.subheader("Pemeriksaan Fisik & Lab (Rapid Test)")
+col3, col4 = st.columns(2)
+
+with col3:
+    kesadaran = st.selectbox("Tingkat Kesadaran (GCS)", ["Compos Mentis (Sadar Penuh)", "Apatis", "Somnolen", "Sopor", "Koma"])
+    # Bisa dikembangkan untuk Tanda-Tanda Vital (Tensi, Nadi, RR, Suhu) di masa depan
+
+with col4:
     gula_darah = st.number_input("Gula Darah Sewaktu (mg/dL)", min_value=0, value=110)
     hb = st.number_input("Hemoglobin (g/dL)", min_value=0.0, value=13.0, step=0.1)
     leukosit = st.number_input("Leukosit (/uL)", min_value=0, value=8000)
     trombosit = st.number_input("Trombosit (/uL)", min_value=0, value=250000)
 
+
+# --- LOGIKA INFERENSI AI ---
 if st.button("🚨 Analisis Triase Sekarang", use_container_width=True, type="primary"):
     if not api_key:
         st.error("Silakan masukkan Gemini API Key di sidebar sebelah kiri!")
     elif not selected_model:
         st.error("Silakan pilih model AI di sidebar terlebih dahulu.")
     else:
-        with st.spinner(f"Menganalisis menggunakan model: {selected_model}..."):
+        with st.spinner(f"Menganalisis profil medis komprehensif dengan {selected_model}..."):
             try:
                 model = genai.GenerativeModel(selected_model)
                 
-                # 2. FITUR TAMBAHAN: UPDATE PROMPT MINTA RENCANA TINDAKAN (ACTION PLAN)
+                # Memasukkan semua variabel ke dalam prompt untuk menajamkan diferensial diagnosis
                 prompt = f"""
                 Kamu adalah Dokter Jaga IGD Senior. Analisis kasus berikut dan tentukan status triase (Merah, Kuning, Hijau, atau Hitam) dan disposisi ruangan (Rawat Jalan, Rawat Inap Biasa, HDU, atau ICU).
                 
-                Data Pasien:
+                Data Profil & Antropometri:
                 - Usia: {usia} tahun
-                - Keluhan: {keluhan}
-                - Kesadaran: {kesadaran}
+                - Jenis Kelamin: {gender}
+                - Etnis: {etnis if etnis else 'Tidak spesifik'}
+                - Berat Badan: {bb} kg
+                - Tinggi Badan: {tb} cm
                 
-                Hasil Lab:
+                Riwayat Klinis:
+                - Keluhan Utama: {keluhan}
+                - Riwayat Penyakit (Komorbid): {riwayat_penyakit if riwayat_penyakit else 'Disangkal / Tidak ada'}
+                - Riwayat Obat: {riwayat_obat if riwayat_obat else 'Tidak ada data'}
+                - Alergi: {alergi if alergi else 'Disangkal'}
+                
+                Pemeriksaan Fisik & Lab:
+                - Kesadaran: {kesadaran}
                 - Gula Darah Sewaktu: {gula_darah} mg/dL
                 - Hemoglobin: {hb} g/dL
                 - Leukosit: {leukosit} /uL
@@ -97,7 +126,7 @@ if st.button("🚨 Analisis Triase Sekarang", use_container_width=True, type="pr
                 DIAGNOSA: [1-2 kemungkinan diagnosa]
                 DISPOSISI: [Rawat Jalan / Rawat Inap / HDU / ICU]
                 ALASAN: [Penjelasan medis singkat maksimal 3 kalimat]
-                RENCANA TINDAKAN: [Sebutkan 2 langkah penanganan medis awal/first aid di IGD]
+                RENCANA TINDAKAN: [Sebutkan 2 langkah penanganan medis awal/first aid di IGD dengan memperhatikan alergi pasien jika ada]
                 """
                 
                 response = model.generate_content(prompt)
@@ -115,11 +144,10 @@ if st.button("🚨 Analisis Triase Sekarang", use_container_width=True, type="pr
                 else:
                     st.info(hasil)
                 
-                # 3. FITUR TAMBAHAN: TOMBOL DOWNLOAD HASIL REPORT
                 st.download_button(
                     label="📄 Download Laporan Triase (.txt)",
                     data=hasil,
-                    file_name="Laporan_Triase_IGD.txt",
+                    file_name="Laporan_Triase_IGD_Lengkap.txt",
                     mime="text/plain",
                     use_container_width=True
                 )
