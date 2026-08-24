@@ -5,7 +5,7 @@ import google.generativeai as genai
 st.set_page_config(page_title="ER Triage AI", page_icon="🚑", layout="wide")
 
 st.title("🚑 AI ER Triage Assistant (Advanced EMR)")
-st.markdown("Sistem pendukung keputusan IGD dengan analisis komprehensif meliputi parameter anamnesis, sosiodemografi, dan serologi medis.")
+st.markdown("Sistem pendukung keputusan IGD dengan analisis komprehensif meliputi parameter anamnesis, hemodinamik, dan serologi medis.")
 
 st.warning("⚠️ **DISCLAIMER MEDIS:** Aplikasi ini adalah purwarupa (prototype) Sistem Pendukung Keputusan berbasis AI. Hasil analisis **TIDAK** menggantikan diagnosis medis profesional.")
 
@@ -78,12 +78,24 @@ with tab2:
 with tab3:
     col_e, col_f, col_g = st.columns(3)
     with col_e:
-        st.markdown("**Klinis Dasar**")
-        kesadaran = st.selectbox("Tingkat Kesadaran (GCS)", ["Compos Mentis (Sadar Penuh)", "Apatis", "Somnolen", "Sopor", "Koma"])
-        gula_darah = st.number_input("Gula Darah Sewaktu (mg/dL)", min_value=0, value=110)
+        # --- TAMBAHAN TANDA-TANDA VITAL (KRUSIAL) ---
+        st.markdown("**Tanda-Tanda Vital (TTV)**")
+        kesadaran = st.selectbox("Kesadaran (GCS)", ["Compos Mentis (Sadar Penuh)", "Apatis", "Somnolen", "Sopor", "Koma"])
+        
+        c_tensi1, c_tensi2 = st.columns(2)
+        with c_tensi1:
+            td_sistolik = st.number_input("Sistolik (mmHg)", min_value=0, value=120)
+        with c_tensi2:
+            td_diastolik = st.number_input("Diastolik (mmHg)", min_value=0, value=80)
+            
+        nadi = st.number_input("Heart Rate (x/menit)", min_value=0, value=80)
+        rr = st.number_input("Resp. Rate (x/menit)", min_value=0, value=18)
+        spo2 = st.number_input("SpO2 (%)", min_value=0, max_value=100, value=98)
+        suhu = st.number_input("Suhu (°C)", min_value=20.0, max_value=45.0, value=36.5, step=0.1)
     
     with col_f:
-        st.markdown("**Darah Lengkap (CBC)**")
+        st.markdown("**Darah Lengkap & Gula**")
+        gula_darah = st.number_input("GDS (mg/dL)", min_value=0, value=110)
         hb = st.number_input("Hemoglobin (g/dL)", min_value=0.0, value=13.0, step=0.1)
         hematokrit = st.number_input("Hematokrit (%)", min_value=0.0, value=40.0, step=0.1)
         leukosit = st.number_input("Leukosit (/uL)", min_value=0, value=8000)
@@ -108,7 +120,6 @@ if st.button("🚨 Analisis Triase Sekarang", use_container_width=True, type="pr
             try:
                 model = genai.GenerativeModel(selected_model)
                 
-                # Menggabungkan seluruh data ke dalam satu Prompt terstruktur
                 prompt = f"""
                 Kamu adalah Dokter Jaga IGD Senior. Analisis kasus pasien ini dan tentukan status triase (Merah, Kuning, Hijau, atau Hitam) dan disposisi ruangan (Rawat Jalan, Rawat Inap Biasa, HDU, atau ICU).
                 
@@ -130,19 +141,26 @@ if st.button("🚨 Analisis Triase Sekarang", use_container_width=True, type="pr
                 - Riwayat Perjalanan (14 hr): {riwayat_perjalanan if riwayat_perjalanan else 'Disangkal'}
                 - Gaya Hidup & Diet: {kebiasaan_makan if kebiasaan_makan else 'Tidak spesifik'}
                 
-                Pemeriksaan Fisik & Lab:
+                Pemeriksaan Fisik & Hemodinamik (TTV):
                 - Kesadaran: {kesadaran}
+                - Tekanan Darah: {td_sistolik}/{td_diastolik} mmHg
+                - Nadi (HR): {nadi} x/menit
+                - Pernapasan (RR): {rr} x/menit
+                - SpO2: {spo2}%
+                - Suhu: {suhu} °C
+                
+                Laboratorium:
                 - Gula Darah Sewaktu: {gula_darah} mg/dL
                 - Darah Lengkap: Hb {hb} g/dL, Ht {hematokrit}%, Leukosit {leukosit}/uL, Trombosit {trombosit}/uL
                 - Serologi: HIV {status_hiv}, HBsAg {status_hepatitis}, Sifilis {status_sifilis}
                 
-                Fokuskan diferensial diagnosis pada penyakit IGD akut dengan memperhatikan potensi infeksi menular, faktor risiko pekerjaan/perjalanan, serta interaksi obat dan alergi.
+                Fokuskan diferensial diagnosis pada kondisi kegawatdaruratan medis. Perhatikan secara khusus parameter hemodinamik (TTV) untuk mendeteksi tanda syok, gagal napas, atau sepsis.
                 Berikan jawaban dalam format persis seperti ini (tanpa markdown tebal):
-                TRIASE: [Pilih warna]
+                TRIASE: [Pilih warna: Merah / Kuning / Hijau / Hitam]
                 DIAGNOSA: [1-2 kemungkinan diagnosa]
                 DISPOSISI: [Rawat Jalan / Rawat Inap / HDU / ICU]
-                ALASAN: [Penjelasan medis komprehensif maksimal 4 kalimat, mengaitkan faktor risiko anamnesis dan lab]
-                RENCANA TINDAKAN: [Sebutkan 3 langkah penanganan awal di IGD, termasuk isolasi jika ada kecurigaan penyakit menular, dan perhatikan alergi]
+                ALASAN: [Penjelasan medis komprehensif maksimal 4 kalimat, mengaitkan faktor hemodinamik, anamnesis, dan lab]
+                RENCANA TINDAKAN: [Sebutkan 3-4 langkah penanganan awal di IGD, termasuk resusitasi cairan/oksigenasi jika TTV tidak stabil, isolasi jika infeksius, dan perhatikan alergi]
                 """
                 
                 response = model.generate_content(prompt)
@@ -163,7 +181,7 @@ if st.button("🚨 Analisis Triase Sekarang", use_container_width=True, type="pr
                 st.download_button(
                     label="📄 Download Laporan Triase Lengkap (.txt)",
                     data=hasil,
-                    file_name="Laporan_Triase_IGD_Komprehensif.txt",
+                    file_name="Laporan_Triase_IGD_Final.txt",
                     mime="text/plain",
                     use_container_width=True
                 )
