@@ -29,7 +29,23 @@ if api_key:
             # Membersihkan prefix "models/" agar lebih rapi saat ditampilkan
             model_options = [name.replace("models/", "") for name in available_models]
             st.sidebar.success("API Key Valid!")
-            selected_model = st.sidebar.selectbox("Pilih Model AI (Auto-detect):", model_options)
+            
+            # --- PERUBAHAN ADA DI SINI ---
+            # Mencari index 'gemini-3.6-flash' agar dijadikan default. 
+            # Jika tidak ada, cari 'gemini-pro'. Jika tidak ada juga, pakai urutan ke-0.
+            default_index = 0
+            if "gemini-3.6-flash" in model_options:
+                default_index = model_options.index("gemini-3.6-flash")
+            elif "gemini-pro" in model_options:
+                default_index = model_options.index("gemini-pro")
+                
+            selected_model = st.sidebar.selectbox(
+                "Pilih Model AI (Auto-detect):", 
+                options=model_options, 
+                index=default_index
+            )
+            # -----------------------------
+            
         else:
             st.sidebar.error("API Key valid, tapi tidak ada model text-generation yang tersedia.")
             
