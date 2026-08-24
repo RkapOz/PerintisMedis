@@ -1,5 +1,208 @@
 import streamlit as st
 import google.generativeai as genai
+import datetime
+
+# Konfigurasi Halaman
+st.set_page_config(page_title="ER Triage AI", page_icon="🚑", layout="wide")
+
+st.title("🚑 AI ER Triage Assistant (Advanced EMR)")
+st.markdown("Sistem pendukung keputusan IGD dengan standar anamnesis, primary survey (ABCDE), dan hemodinamik komprehensif.")
+
+st.warning("⚠️ **DISCLAIMER MEDIS:** Aplikasi ini adalah purwarupa (prototype) Sistem Pendukung Keputusan berbasis AI. Hasil analisis **TIDAK** menggantikan diagnosis medis profesional.")
+
+# Sidebar untuk Konfigurasi API
+with st.sidebar:
+    st.header("Konfigurasi API")
+    api_key = st.text_input("Masukkan Google Gemini API Key:", type="password")
+    st.markdown("[Dapatkan API Key Gratis di Google AI Studio](https://aistudio.google.com/app/apikey)")
+    st.divider()
+    
+# Logika Auto-Detect Model
+selected_model = None
+if api_key:
+    try:
+        genai.configure(api_key=api_key)
+        available_models = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
+        
+        if available_models:
+            model_options = [name.replace("models/", "") for name in available_models]
+            st.sidebar.success("API Key Valid!")
+            
+            default_index = 0
+            if "gemini-3.6-flash" in model_options:
+                default_index = model_options.index("gemini-3.6-flash")
+            elif "gemini-pro" in model_options:
+                default_index = model_options.index("gemini-pro")
+                
+            selected_model = st.sidebar.selectbox("Pilih Model AI (Auto-detect):", options=model_options, index=default_index)
+        else:
+            st.sidebar.error("API Key valid, tapi tidak ada model text-generation yang tersedia.")
+    except Exception as e:
+        st.sidebar.error(f"Gagal memverifikasi API Key: {e}")
+
+st.sidebar.info("Kategori Triase:\n- 🔴 Merah: Resusitasi / Gawat Darurat\n- 🟡 Kuning: Urgent\n- 🟢 Hijau: Rawat Jalan\n- ⚫ Hitam: DOA / Palliative")
+
+# --- UI FORM REKAM MEDIS DENGAN TABS ---
+st.header("📋 Form Triage & Rekam Medis Terpadu")
+
+tab1, tab2, tab3 = st.tabs(["👤 Identitas & Profil", "🩺 Anamnesis (KU & RPS)", "🔬 Primary Survey, TTV & Lab"])
+
+with tab1:
+    col_a, col_b = st.columns(2)
+    with col_a:
+        # --- TAMBAHAN IDENTITAS ---
+        nama = st.text_input("Nama Lengkap Pasien", placeholder="Misal: Tn. Fulan")
+        no_rm = st.text_input("Nomor Rekam Medis (RM)", placeholder="Misal: RM-123456")
+        tgl_lahir = st.date_input("Tanggal Lahir", min_value=datetime.date(1900, 1, 1), max_value=datetime.date.today())
+        
+        gender = st.selectbox("Jenis Kelamin", ["Laki-laki", "Perempuan"])
+        gol_darah = st.selectbox("Golongan Darah & Rhesus", ["Belum Diketahui", "A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"])
+    with col_b:
+        etnis = st.text_input("Etnis / Ras (Opsional)", placeholder="Misal: Asia Tenggara")
+        pendidikan = st.selectbox("Pendidikan Terakhir", ["Tidak Sekolah", "SD", "SMP", "SMA", "Diploma", "Sarjana", "Pascasarjana"])
+        pekerjaan = st.text_input("Pekerjaan", placeholder="Misal: Pegawai Swasta, Petani, IRT...")
+        status_nikah = st.selectbox("Status Pernikahan", ["Belum Kawin", "Kawin", "Cerai Hidup", "Cerai Mati"])
+        
+        c_bb, c_tb = st.columns(2)
+        with c_bb:
+            bb = st.number_input("Berat Badan (kg)", min_value=0.0, value=65.0)
+        with c_tb:
+            tb = st.number_input("Tinggi Badan (cm)", min_value=0.0, value=165.0)
+
+with tab2:
+    col_c, col_d = st.columns(2)
+    with col_c:
+        # --- TAMBAHAN KELUHAN UTAMA, RPS, ONSET & PAIN SCORE ---
+        keluhan_utama = st.text_input("Keluhan Utama (Chief Complaint)", "Nyeri dada kiri")
+        rps = st.text_area("Riwayat Penyakit Sekarang (RPS)", "Nyeri menjalar ke lengan, disertai keringat dingin dan mual.")
+        
+        c_onset, c_pain = st.columns(2)
+        with c_onset:
+            onset = st.text_input("Onset / Durasi", "2 jam yang lalu")
+        with c_pain:
+            pain_score = st.slider("Pain Score (VAS/NRS)", 0, 10, 0)
+            
+    with col_d:
+        riwayat_penyakit = st.text_area("Riwayat Penyakit Dahulu (Komorbid)", placeholder="Misal: Hipertensi, DM Tipe 2, Asma...")
+        riwayat_obat = st.text_area("Riwayat Penggunaan Obat", placeholder="Misal: Amlodipine 5mg, Metformin...")
+        alergi = st.text_input("Alergi (Obat/Makanan)", placeholder="Misal: Alergi Amoxicillin, Seafood...")
+        riwayat_perjalanan = st.text_area("Riwayat Perjalanan (14 Hari Terakhir) & Kebiasaan", placeholder="Misal: Baru pulang dari daerah endemis, merokok 1 bungkus/hari...")
+
+with tab3:
+    col_e, col_f, col_g = st.columns(3)
+    with col_e:
+        # --- TAMBAHAN GCS E/V/M & PRIMARY SURVEY ABCDE ---
+        st.markdown("**GCS & Primary Survey (ABCDE)**")
+        cg1, cg2, cg3 = st.columns(3)
+        with cg1: e = st.number_input("E (Eye)", 1, 4, 4)
+        with cg2: v = st.number_input("V (Verbal)", 1, 5, 5)
+        with cg3: m = st.number_input("M (Motor)", 1, 6, 6)
+        
+        gcs_total = e + v + m
+        st.caption(f"Total GCS: {gcs_total}")
+        
+        airway = st.text_input("Airway", "Clear, gurgling/snoring (-)")
+        breathing = st.text_input("Breathing", "Vesikuler, wheezing (-), retraksi (-)")
+        circulation = st.text_input("Circulation", "Akral hangat, CRT < 2 dtk")
+        disability = st.text_input("Disability", "Pupil isokor, reflex cahaya (+/+)")
+        exposure = st.text_input("Exposure", "Tidak ada jejas/luka terbuka")
+        
+    with col_f:
+        st.markdown("**Tanda-Tanda Vital (TTV)**")
+        c_tensi1, c_tensi2 = st.columns(2)
+        with c_tensi1: td_sistolik = st.number_input("Sistolik", min_value=0, value=120)
+        with c_tensi2: td_diastolik = st.number_input("Diastolik", min_value=0, value=80)
+            
+        nadi = st.number_input("Heart Rate (x/menit)", min_value=0, value=80)
+        rr = st.number_input("Resp. Rate (x/menit)", min_value=0, value=18)
+        spo2 = st.number_input("SpO2 (%)", min_value=0, max_value=100, value=98)
+        suhu = st.number_input("Suhu (°C)", min_value=20.0, max_value=45.0, value=36.5, step=0.1)
+        
+    with col_g:
+        st.markdown("**Lab Rapid & Serologi**")
+        gula_darah = st.number_input("GDS (mg/dL)", min_value=0, value=110)
+        hb = st.number_input("Hemoglobin (g/dL)", min_value=0.0, value=13.0, step=0.1)
+        leukosit = st.number_input("Leukosit (/uL)", min_value=0, value=8000)
+        trombosit = st.number_input("Trombosit (/uL)", min_value=0, value=250000)
+        status_hiv = st.selectbox("Screening HIV", ["Belum Diperiksa", "Non-Reaktif", "Reaktif"])
+        status_hepatitis = st.selectbox("HBsAg", ["Belum Diperiksa", "Non-Reaktif", "Reaktif"])
+
+st.divider()
+
+# --- LOGIKA INFERENSI AI ---
+if st.button("🚨 Analisis Triase Sekarang", use_container_width=True, type="primary"):
+    if not api_key:
+        st.error("Silakan masukkan Gemini API Key di sidebar sebelah kiri!")
+    elif not selected_model:
+        st.error("Silakan pilih model AI di sidebar terlebih dahulu.")
+    else:
+        with st.spinner(f"Menganalisis matriks rekam medis dengan {selected_model}..."):
+            try:
+                model = genai.GenerativeModel(selected_model)
+                
+                prompt = f"""
+                Kamu adalah Dokter Jaga IGD Senior. Analisis kasus pasien ini dan tentukan status triase (Merah, Kuning, Hijau, atau Hitam) dan disposisi ruangan.
+                
+                Data Identitas & Profil:
+                - Nama: {nama if nama else 'NN'}, No. RM: {no_rm}, Tgl Lahir: {tgl_lahir}
+                - Jenis Kelamin: {gender}, BB: {bb} kg, TB: {tb} cm
+                
+                Anamnesis Klinis:
+                - Keluhan Utama: {keluhan_utama}
+                - RPS: {rps}
+                - Onset/Durasi: {onset}
+                - Pain Score: {pain_score}/10
+                - Riwayat Penyakit (Komorbid): {riwayat_penyakit if riwayat_penyakit else 'Disangkal'}
+                - Riwayat Obat: {riwayat_obat if riwayat_obat else 'Tidak ada data'}
+                - Alergi: {alergi if alergi else 'Disangkal'}
+                
+                Primary Survey (ABCDE) & TTV:
+                - Airway: {airway}
+                - Breathing: {breathing}, RR: {rr} x/m, SpO2: {spo2}%
+                - Circulation: {circulation}, TD: {td_sistolik}/{td_diastolik} mmHg, HR: {nadi} x/m
+                - Disability: {disability}, GCS: E{e}V{v}M{m} (Total: {gcs_total})
+                - Exposure: {exposure}, Suhu: {suhu} °C
+                
+                Laboratorium:
+                - Gula Darah Sewaktu: {gula_darah} mg/dL
+                - Darah Lengkap: Hb {hb} g/dL, Leukosit {leukosit}/uL, Trombosit {trombosit}/uL
+                - Serologi: HIV {status_hiv}, HBsAg {status_hepatitis}
+                
+                Fokuskan diferensial diagnosis pada kondisi kegawatdaruratan medis berdasarkan Primary Survey dan Hemodinamik.
+                Berikan jawaban dalam format persis seperti ini (tanpa markdown tebal):
+                TRIASE: [Pilih warna: Merah / Kuning / Hijau / Hitam]
+                DIAGNOSA: [1-2 kemungkinan diagnosa]
+                DISPOSISI: [Rawat Jalan / Rawat Inap / HDU / ICU]
+                ALASAN: [Penjelasan medis komprehensif maksimal 4 kalimat berdasarkan ABCDE dan RPS]
+                RENCANA TINDAKAN: [Sebutkan 3-4 langkah resusitasi/penanganan awal sesuai pedoman gawat darurat]
+                """
+                
+                response = model.generate_content(prompt)
+                hasil = response.text
+                
+                st.divider()
+                st.subheader("📋 Hasil Analisis Clinical Decision Support (CDS)")
+                
+                if "MERAH" in hasil.upper():
+                    st.error(hasil)
+                elif "KUNING" in hasil.upper():
+                    st.warning(hasil)
+                elif "HIJAU" in hasil.upper():
+                    st.success(hasil)
+                else:
+                    st.info(hasil)
+                
+                st.download_button(
+                    label="📄 Download Laporan Triase Lengkap (.txt)",
+                    data=hasil,
+                    file_name="Laporan_Triase_IGD_Final.txt",
+                    mime="text/plain",
+                    use_container_width=True
+                )
+                    
+            except Exception as e:
+                st.error(f"Terjadi kesalahan saat inferensi: {e}")import streamlit as st
+import google.generativeai as genai
 
 # Konfigurasi Halaman
 st.set_page_config(page_title="ER Triage AI", page_icon="🚑", layout="wide")
